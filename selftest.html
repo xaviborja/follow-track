@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>selftest</title>
+<pre id="out">arrancando…</pre>
+<iframe id="fr" src="index.html" style="width:420px;height:800px;border:1px solid #ccc"></iframe>
+<script type="module">
+const log = [];
+const say = (m) => { log.push(m); document.getElementById('out').textContent = log.join('\n'); };
+window.addEventListener('error', (e) => say('ERROR: ' + e.message));
+window.addEventListener('unhandledrejection', (e) => say('REJECTION: ' + e.reason));
+
+import { parseTrackFile } from './js/parse.js';
+import { buildTrack, nearestOnTrack } from './js/geo.js';
+
+const gpx = await (await fetch('samples/ejemplo-collserola.gpx')).text();
+const parsed = parseTrackFile(gpx, 'ejemplo-collserola.gpx');
+say(`parse GPX: ${parsed.points.length} puntos, wpts=${parsed.waypoints.length}, name="${parsed.name}"`);
+const tr = buildTrack(parsed.points, parsed.name);
+say(`track: ${(tr.total / 1000).toFixed(2)} km, ascent=${tr.ascent} m`);
+
+// KML y GeoJSON mínimos
+const kml = `<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>k</name><Placemark><LineString><coordinates>2.0,41.0,10 2.01,41.0,12</coordinates></LineString></Placemark></Document></kml>`;
+say('parse KML: ' + parseTrackFile(kml, 'a.kml').points.length + ' puntos');
+const gj = JSON.stringify({ type: 'Feature', geometry: { type: 'LineString', coordinates: [[2, 41], [2.01, 41]] } });
+say('parse GeoJSON: ' + parseTrackFile(gj, 'a.json').points.length + ' puntos');
+try { parseTrackFile('<gpx></gpx>', 'x.gpx'); say('FALLO: deberia lanzar error'); }
+catch (e) { say('error controlado OK: ' + e.message); }
+
+const fr = document.getElementById('fr');
+await new Promise((r) => (fr.contentDocument?.readyState === 'complete' ? r() : fr.addEventListener('load', r)));
+await new Promise((r) => setTimeout(r, 1200));
+const w = fr.contentWindow;
+const d = fr.contentDocument;
+say('app arrancada (window.followTrack): ' + !!w.followTrack);
+say('Leaflet panes en el DOM: ' + d.querySelectorAll('.leaflet-pane').length);
+
+// Cargamos el track en la app y simulamos una posición 120 m al lado del track.
+w.followTrack.showTrack(parsed, { save: false });
+say('nombre en cabecera: ' + d.getElementById('trackName').textContent);
+w.followTrack.opts.test = true;
+w.followTrack.opts.threshold = 50;
+
+const mid = parsed.points[Math.floor(parsed.points.length / 2)];
+const off = { lat: mid.lat + 0.00108, lng: mid.lon }; // ~120 m al norte
+w.followTrack.map.fire('click', { latlng: off });
+await new Promise((r) => setTimeout(r, 300));
+say(`fuera de ruta -> desvio=${d.getElementById('devValue').textContent} progreso=${d.getElementById('progValue').textContent} restante=${d.getElementById('remValue').textContent}`);
+say('banner visible: ' + !d.getElementById('alertBanner').hasAttribute('hidden') + ' | texto: ' + d.getElementById('alertText').textContent);
+say('clase stat: ' + d.getElementById('statDev').className);
+
+// Ahora justo encima del track
+w.followTrack.map.fire('click', { latlng: { lat: mid.lat, lng: mid.lon } });
+await new Promise((r) => setTimeout(r, 300));
+say(`en ruta -> desvio=${d.getElementById('devValue').textContent} progreso=${d.getElementById('progValue').textContent}`);
+say('banner visible: ' + !d.getElementById('alertBanner').hasAttribute('hidden'));
+say('clase stat: ' + d.getElementById('statDev').className);
+
+// Al final del track
+const end = parsed.points[parsed.points.length - 1];
+w.followTrack.map.fire('click', { latlng: { lat: end.lat, lng: end.lon } });
+await new Promise((r) => setTimeout(r, 300));
+say(`en el final -> progreso=${d.getElementById('progValue').textContent} restante=${d.getElementById('remValue').textContent}`);
+
+say('FIN');
+</script>

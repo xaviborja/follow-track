@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Follow Track</title>
+<meta name="theme-color" content="#0f1720">
+<meta name="description" content="Carga un track GPX y comprueba si lo estás siguiendo.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div id="map" aria-label="Mapa"></div>
+
+<header class="topbar">
+  <div class="track-name" id="trackName">Sin track cargado</div>
+  <div class="topbar-actions">
+    <button id="btnLoad" class="icon-btn" title="Cargar track" aria-label="Cargar track">📂</button>
+    <button id="btnSettings" class="icon-btn" title="Ajustes" aria-label="Ajustes">⚙️</button>
+  </div>
+</header>
+
+<div id="alertBanner" class="alert-banner" role="status" aria-live="assertive" hidden>
+  <span id="alertText">Fuera de ruta</span>
+  <button id="alertMute" class="alert-mute">Silenciar</button>
+</div>
+
+<div class="side-actions">
+  <button id="btnFit" class="fab" title="Ver todo el track" aria-label="Ver todo el track">🗺️</button>
+  <button id="btnFollow" class="fab" title="Centrar en mi posición" aria-label="Centrar en mi posición" aria-pressed="false">🎯</button>
+</div>
+
+<section class="panel" id="panel">
+  <div class="stats">
+    <div class="stat" id="statDev">
+      <span class="stat-label">Desvío</span>
+      <span class="stat-value" id="devValue">—</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Progreso</span>
+      <span class="stat-value" id="progValue">—</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Restante</span>
+      <span class="stat-value" id="remValue">—</span>
+    </div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
+  <div class="meta-row">
+    <span id="gpsInfo">GPS parado</span>
+    <button id="btnGps" class="primary-btn">Iniciar GPS</button>
+  </div>
+</section>
+
+<div id="dropHint" class="drop-hint" hidden>Suelta aquí el fichero GPX</div>
+
+<div id="sheetBackdrop" class="backdrop" hidden></div>
+<aside id="sheet" class="sheet" hidden aria-label="Ajustes">
+  <div class="sheet-head">
+    <h2>Ajustes</h2>
+    <button id="sheetClose" class="icon-btn" aria-label="Cerrar">✕</button>
+  </div>
+
+  <label class="field">
+    <span>Avisar si me alejo más de <b id="thrLabel">50 m</b></span>
+    <input type="range" id="thrRange" min="10" max="500" step="10" value="50">
+  </label>
+
+  <label class="switch">
+    <input type="checkbox" id="optSound" checked>
+    <span>Sonido al salirse del track</span>
+  </label>
+  <label class="switch">
+    <input type="checkbox" id="optVibrate" checked>
+    <span>Vibración</span>
+  </label>
+  <label class="switch">
+    <input type="checkbox" id="optWake" checked>
+    <span>Mantener la pantalla encendida</span>
+  </label>
+  <label class="switch">
+    <input type="checkbox" id="optTest">
+    <span>Modo prueba (tocar el mapa fija mi posición)</span>
+  </label>
+
+  <div class="sheet-info" id="trackInfo"></div>
+
+  <div class="sheet-actions">
+    <button id="btnLoad2" class="primary-btn wide">Cargar otro track</button>
+    <button id="btnClear" class="ghost-btn wide">Borrar track guardado</button>
+  </div>
+  <p class="sheet-foot">Mapa © colaboradores de OpenStreetMap</p>
+</aside>
+
+<input type="file" id="fileInput" accept=".gpx,.kml,.tcx,.json,.geojson,application/gpx+xml,application/xml,text/xml,application/json" hidden>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
