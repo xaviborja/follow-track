@@ -63,21 +63,13 @@ export function buildTrack(points, name = 'Track') {
     cum[i] = cum[i - 1] + segLen[i - 1];
   }
   let minLat = Infinity, minLon = Infinity, maxLat = -Infinity, maxLon = -Infinity;
-  let up = 0, down = 0, prevEle = null;
   for (const p of pts) {
     if (p.lat < minLat) minLat = p.lat;
     if (p.lat > maxLat) maxLat = p.lat;
     if (p.lon < minLon) minLon = p.lon;
     if (p.lon > maxLon) maxLon = p.lon;
-    if (Number.isFinite(p.ele)) {
-      if (prevEle !== null) {
-        const d = p.ele - prevEle;
-        // filtro de ruido barométrico/GPS: ignoramos saltos < 3 m
-        if (d > 3) { up += d; prevEle = p.ele; }
-        else if (d < -3) { down -= d; prevEle = p.ele; }
-      } else prevEle = p.ele;
-    }
   }
+
   return {
     name,
     points: pts,
@@ -85,9 +77,104 @@ export function buildTrack(points, name = 'Track') {
     cum,
     total: n ? cum[n - 1] : 0,
     bounds: n ? [[minLat, minLon], [maxLat, maxLon]] : null,
+    ...elevationProfile(pts, cum),
+  };
+}
+
+/**
+ * Serie de elevación lista para dibujar y para contar desnivel.
+ *
+ * La altitud del GPS es ruidosa, así que se suaviza con una media móvil sobre
+ * una ventana de distancia (no de índices: los puntos no están equiespaciados).
+ * El desnivel se cuenta sobre la serie suavizada y con un umbral de 3 m, que es
+ * lo que evita inflar la subida acumulada con el temblor del sensor.
+ */
+function elevationProfile(pts, cum) {
+  const n = pts.length;
+  const raw = pts.map((p) => (Number.isFinite(p.ele) ? p.ele : null));
+  const known = raw.filter((v) => v !== null).length;
+  if (known < Math.max(2, n * 0.5)) {
+    return { hasEle: false, ele: null, cumAscent: null, ascent: 0, descent: 0, minEle: 0, maxEle: 0 };
+  }
+
+  // Rellenamos huecos por interpolación lineal entre los puntos conocidos.
+  const filled = new Float64Array(n);
+  let prevIdx = -1;
+  for (let i = 0; i < n; i++) {
+    if (raw[i] === null) continue;
+    if (prevIdx === -1) for (let j = 0; j < i; j++) filled[j] = raw[i];
+    else for (let j = prevIdx + 1; j < i; j++)
+      filled[j] = raw[prevIdx] + ((raw[i] - raw[prevIdx]) * (j - prevIdx)) / (i - prevIdx);
+    filled[i] = raw[i];
+    prevIdx = i;
+  }
+  for (let j = prevIdx + 1; j < n; j++) filled[j] = filled[prevIdx];
+
+  // Media móvil sobre ±30 m recorridos.
+  const WIN = 30;
+  const ele = new Float64Array(n);
+  let lo = 0, hi = 0, sum = 0;
+  for (let i = 0; i < n; i++) {
+    while (hi < n && cum[hi] <= cum[i] + WIN) sum += filled[hi++];
+    while (cum[lo] < cum[i] - WIN) sum -= filled[lo++];
+    ele[i] = sum / (hi - lo);
+  }
+
+  const cumAscent = new Float64Array(n);
+  let up = 0, down = 0, ref = ele[0];
+  let minEle = ele[0], maxEle = ele[0];
+  for (let i = 1; i < n; i++) {
+    const d = ele[i] - ref;
+    if (d > 3) { up += d; ref = ele[i]; }
+    else if (d < -3) { down -= d; ref = ele[i]; }
+    cumAscent[i] = up;
+    if (ele[i] < minEle) minEle = ele[i];
+    if (ele[i] > maxEle) maxEle = ele[i];
+  }
+
+  return {
+    hasEle: true,
+    ele,
+    cumAscent,
     ascent: Math.round(up),
     descent: Math.round(down),
+    minEle,
+    maxEle,
   };
+}
+
+/**
+ * Interpola un valor de la serie `key` del track (ele, cumAscent…) a una
+ * distancia dada desde el inicio.
+ */
+export function valueAtDistance(track, series, meters) {
+  if (!series) return null;
+  const n = track.points.length;
+  const d = Math.max(0, Math.min(track.total, meters));
+  let lo = 0, hi = n - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (track.cum[mid] <= d) lo = mid; else hi = mid;
+  }
+  const span = track.cum[hi] - track.cum[lo];
+  const t = span > 0 ? (d - track.cum[lo]) / span : 0;
+  return series[lo] + (series[hi] - series[lo]) * t;
+}
+
+/** Coordenadas del punto del track situado a `meters` del inicio. */
+export function positionAtDistance(track, meters) {
+  const n = track.points.length;
+  if (!n) return null;
+  const d = Math.max(0, Math.min(track.total, meters));
+  let lo = 0, hi = n - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (track.cum[mid] <= d) lo = mid; else hi = mid;
+  }
+  const span = track.cum[hi] - track.cum[lo];
+  const t = span > 0 ? (d - track.cum[lo]) / span : 0;
+  const a = track.points[lo], b = track.points[hi];
+  return { lat: a.lat + (b.lat - a.lat) * t, lon: a.lon + (b.lon - a.lon) * t };
 }
 
 /**

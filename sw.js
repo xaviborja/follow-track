@@ -1,5 +1,5 @@
 // Service worker: la app funciona sin conexión y guarda los tiles ya vistos.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = `ft-shell-${VERSION}`;
 const TILES = `ft-tiles-${VERSION}`;
 const TILE_LIMIT = 1200; // ~30-60 MB según zona
@@ -11,6 +11,7 @@ const SHELL_FILES = [
   'js/app.js',
   'js/geo.js',
   'js/parse.js',
+  'js/profile.js',
   'manifest.webmanifest',
   'vendor/leaflet/leaflet.js',
   'vendor/leaflet/leaflet.css',

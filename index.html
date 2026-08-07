@@ -38,6 +38,17 @@
 </div>
 
 <section class="panel" id="panel">
+  <div class="profile" id="profile" hidden>
+    <div class="profile-head">
+      <span class="key"><i class="dot done"></i>recorrido</span>
+      <span class="key"><i class="dot pending"></i>pendiente</span>
+      <span class="profile-now" id="profileNow"></span>
+    </div>
+    <canvas id="profileCanvas" height="110" role="img"
+            aria-label="Perfil de elevación de la ruta"></canvas>
+    <p class="profile-empty" id="profileEmpty" hidden>Este track no trae datos de altitud.</p>
+  </div>
+
   <div class="stats">
     <div class="stat" id="statDev">
       <span class="stat-label">Desvío</span>
@@ -54,6 +65,9 @@
   </div>
   <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
   <div class="meta-row">
+    <button id="btnProfile" class="link-btn" aria-expanded="false" aria-controls="profile">
+      Ver perfil
+    </button>
     <span id="gpsInfo">GPS parado</span>
     <button id="btnGps" class="primary-btn">Iniciar GPS</button>
   </div>

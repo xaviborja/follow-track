@@ -1,12 +1,16 @@
-import { buildTrack, nearestOnTrack, haversine } from './geo.js';
+import { buildTrack, nearestOnTrack, valueAtDistance, positionAtDistance } from './geo.js';
 import { parseTrackFile } from './parse.js';
+import { createProfile } from './profile.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE_TRACK = 'ft.track.v1';
 const STORE_OPTS = 'ft.opts.v1';
 
 const opts = Object.assign(
-  { threshold: 50, sound: true, vibrate: true, wake: true, test: false, follow: true },
+  {
+    threshold: 50, sound: true, vibrate: true, wake: true,
+    test: false, follow: true, profile: false,
+  },
   readJSON(STORE_OPTS, {})
 );
 
@@ -30,12 +34,20 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap',
 }).addTo(map);
 
-const trackLayer = L.polyline([], { color: '#f97316', weight: 5, opacity: 0.9 }).addTo(map);
-const doneLayer = L.polyline([], { color: '#38bdf8', weight: 5, opacity: 0.95 }).addTo(map);
+// Sobre los tiles (fondo claro) van los pasos claros del par azul/naranja; el
+// perfil, que vive sobre el panel oscuro, usa los pasos oscuros de esos mismos
+// tonos. Ambos pares están validados para su superficie.
+const trackLayer = L.polyline([], { color: '#eb6834', weight: 5, opacity: 0.9 }).addTo(map);
+const doneLayer = L.polyline([], { color: '#2a78d6', weight: 5, opacity: 0.95 }).addTo(map);
 const linkLayer = L.polyline([], {
   color: '#ef4444', weight: 2, dashArray: '6 6', opacity: 0.9,
 }).addTo(map);
 const markers = L.layerGroup().addTo(map);
+
+// Marcador del punto que estás consultando en el perfil.
+const scrubMarker = L.circleMarker([0, 0], {
+  radius: 6, color: '#fff', weight: 2, fillColor: '#3987e5', fillOpacity: 1, interactive: false,
+});
 
 const meIcon = L.divIcon({ className: '', html: '<div class="me-dot"></div>', iconSize: [18, 18] });
 const meOffIcon = L.divIcon({ className: '', html: '<div class="me-dot off"></div>', iconSize: [18, 18] });
@@ -51,6 +63,53 @@ map.on('click', (e) => {
   });
 });
 
+/* --- Perfil de elevación -------------------------------------------------- */
+
+// Al arrastrar por el perfil se marca en el mapa el punto correspondiente.
+const profile = createProfile($('profileCanvas'), {
+  onScrub(meters) {
+    if (meters === null) {
+      map.removeLayer(scrubMarker);
+      updateProfileNow();
+      return;
+    }
+    const p = positionAtDistance(state.track, meters);
+    if (!p) return;
+    scrubMarker.setLatLng([p.lat, p.lon]);
+    if (!map.hasLayer(scrubMarker)) scrubMarker.addTo(map);
+    const ele = valueAtDistance(state.track, state.track.ele, meters);
+    $('profileNow').textContent =
+      `km ${(meters / 1000).toFixed(2)} · ${Math.round(ele).toLocaleString('es-ES')} m`;
+  },
+});
+
+function showProfile(on) {
+  opts.profile = on;
+  saveOpts();
+  const box = $('profile');
+  if (on) box.removeAttribute('hidden');
+  else box.setAttribute('hidden', '');
+  $('btnProfile').textContent = on ? 'Ocultar perfil' : 'Ver perfil';
+  $('btnProfile').setAttribute('aria-expanded', String(on));
+  if (on) profile.redraw();
+}
+
+// Altitud y desnivel que queda, o el resumen del track si aún no hay posición.
+function updateProfileNow() {
+  const track = state.track;
+  const el = $('profileNow');
+  if (!track?.hasEle) { el.textContent = ''; return; }
+  const along = state.along;
+  if (along === null || along === undefined) {
+    el.textContent = `↑ ${track.ascent.toLocaleString('es-ES')} m  ↓ ${track.descent.toLocaleString('es-ES')} m`;
+    return;
+  }
+  const ele = valueAtDistance(track, track.ele, along);
+  const upLeft = Math.max(0, track.ascent - valueAtDistance(track, track.cumAscent, along));
+  el.textContent =
+    `${Math.round(ele).toLocaleString('es-ES')} m · quedan ↑ ${Math.round(upLeft).toLocaleString('es-ES')} m`;
+}
+
 /* --- Carga de track ------------------------------------------------------ */
 
 function showTrack(parsed, { save = true, fit = true } = {}) {
@@ -59,6 +118,7 @@ function showTrack(parsed, { save = true, fit = true } = {}) {
 
   state.track = track;
   state.hintIdx = null;
+  state.along = null;
   state.offTrack = false;
   state.muted = false;
 
@@ -83,7 +143,17 @@ function showTrack(parsed, { save = true, fit = true } = {}) {
   $('trackName').textContent = track.name;
   $('trackInfo').textContent =
     `${track.name}\n${fmtKm(track.total)} · ${track.points.length} puntos` +
-    (track.ascent ? `\n↑ ${track.ascent} m  ↓ ${track.descent} m` : '');
+    (track.hasEle ? `\n↑ ${track.ascent} m  ↓ ${track.descent} m` : '\nSin datos de altitud');
+
+  profile.setTrack(track);
+  $('profileCanvas').hidden = !track.hasEle;
+  $('profileEmpty').hidden = track.hasEle;
+  $('profileCanvas').setAttribute(
+    'aria-label',
+    `Perfil de elevación: ${fmtKm(track.total)}, entre ${Math.round(track.minEle)} y ` +
+    `${Math.round(track.maxEle)} metros de altitud, con ${track.ascent} metros de subida acumulada.`
+  );
+  updateProfileNow();
 
   if (fit && track.bounds) map.fitBounds(track.bounds, { padding: [40, 40] });
   if (save) saveTrack(parsed);
@@ -214,11 +284,14 @@ function updateReadout(fix) {
     $('progValue').textContent = '—';
     $('remValue').textContent = track ? fmtKm(track.total) : '—';
     linkLayer.setLatLngs([]);
+    state.along = null;
+    updateProfileNow();
     return;
   }
 
   const near = nearestOnTrack(track, fix.lat, fix.lon, state.hintIdx);
   state.hintIdx = near.segIdx;
+  state.along = near.along;
 
   const dist = near.dist;
   const pct = track.total > 0 ? Math.min(100, (near.along / track.total) * 100) : 0;
@@ -234,6 +307,9 @@ function updateReadout(fix) {
   done.push([near.lat, near.lon]);
   doneLayer.setLatLngs(done);
   linkLayer.setLatLngs(dist > 10 ? [[fix.lat, fix.lon], [near.lat, near.lon]] : []);
+
+  profile.setPosition(near.along);
+  updateProfileNow();
 
   const statEl = $('statDev');
   statEl.classList.toggle('off-track', dist > opts.threshold);
@@ -373,6 +449,7 @@ $('btnFit').onclick = () => {
   } else toast('Carga primero un track.');
 };
 
+$('btnProfile').onclick = () => showProfile(!opts.profile);
 $('btnSettings').onclick = () => openSheet(true);
 $('sheetClose').onclick = () => openSheet(false);
 $('sheetBackdrop').onclick = () => openSheet(false);
@@ -382,6 +459,9 @@ $('btnClear').onclick = () => {
   localStorage.removeItem(STORE_TRACK);
   state.track = null;
   state.hintIdx = null;
+  state.along = null;
+  profile.setTrack(null);
+  updateProfileNow();
   trackLayer.setLatLngs([]);
   doneLayer.setLatLngs([]);
   linkLayer.setLatLngs([]);
@@ -450,6 +530,15 @@ function saveOpts() {
 
 /* --- Arranque ------------------------------------------------------------ */
 
+// Los botones flotantes y la atribución del mapa se apartan según lo alto que
+// sea el panel, que cambia al abrir el perfil.
+// offsetHeight y no contentRect: este último excluye el padding del panel, y los
+// botones acabarían metidos por debajo de su borde.
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty('--panel-h', `${$('panel').offsetHeight}px`);
+  map.invalidateSize({ pan: false });
+}).observe($('panel'));
+
 $('thrRange').value = opts.threshold;
 $('thrLabel').textContent = `${opts.threshold} m`;
 $('optSound').checked = opts.sound;
@@ -457,6 +546,7 @@ $('optVibrate').checked = opts.vibrate;
 $('optWake').checked = opts.wake;
 $('optTest').checked = opts.test;
 $('btnFollow').setAttribute('aria-pressed', String(opts.follow));
+showProfile(opts.profile);
 
 // ?track=ruta.gpx permite abrir la app con un track ya cargado (enlace compartible).
 const trackParam = new URLSearchParams(location.search).get('track');

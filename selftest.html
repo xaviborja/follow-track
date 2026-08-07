@@ -63,3 +63,37 @@ say(`en el final -> progreso=${d.getElementById('progValue').textContent} restan
 
 say('FIN');
 </script>
+<script type="module">
+// --- Perfil de elevación ---
+const say2=(m)=>{const o=document.getElementById('out');o.textContent+='\n'+m};
+await new Promise(r=>setTimeout(r,3000));
+const fr2=document.getElementById('fr'), w2=fr2.contentWindow, d2=fr2.contentDocument;
+const t=w2.followTrack.state.track;
+say2('--- PERFIL ---');
+say2(`hasEle=${t.hasEle} min=${Math.round(t.minEle)} max=${Math.round(t.maxEle)} asc=${t.ascent} desc=${t.descent}`);
+say2(`cumAscent final = ${Math.round(t.cumAscent[t.cumAscent.length-1])} (debe igualar asc=${t.ascent})`);
+// abrir el perfil
+d2.getElementById('btnProfile').click();
+await new Promise(r=>setTimeout(r,400));
+const cv=d2.getElementById('profileCanvas');
+say2('perfil visible: '+!d2.getElementById('profile').hasAttribute('hidden'));
+say2(`canvas ${cv.width}x${cv.height} px (dpr aplicado), css ${Math.round(cv.getBoundingClientRect().width)}px`);
+// ¿ha pintado algo?
+const px=cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data;
+let painted=0; for(let i=3;i<px.length;i+=4) if(px[i]>0) painted++;
+say2('píxeles pintados: '+painted+' ('+(100*painted/(cv.width*cv.height)).toFixed(1)+'%)');
+say2('texto cabecera perfil: '+d2.getElementById('profileNow').textContent);
+// simular arrastre por el perfil (consulta)
+const r=cv.getBoundingClientRect();
+const ev=(type,x)=>cv.dispatchEvent(new PointerEvent(type,{bubbles:true,clientX:r.left+x,clientY:r.top+50,pointerId:1}));
+cv.setPointerCapture=()=>{};
+ev('pointerdown', r.width*0.5); await new Promise(r=>setTimeout(r,150));
+say2('al consultar el punto medio: '+d2.getElementById('profileNow').textContent);
+say2('marcador de consulta en el mapa: '+(d2.querySelectorAll('path.leaflet-interactive').length>=2));
+ev('pointermove', r.width*0.8); await new Promise(r=>setTimeout(r,150));
+say2('al 80% del recorrido: '+d2.getElementById('profileNow').textContent);
+ev('pointerup', r.width*0.8); await new Promise(r=>setTimeout(r,150));
+say2('al soltar vuelve a: '+d2.getElementById('profileNow').textContent);
+say2('--- panel-h aplicado: '+d2.documentElement.style.getPropertyValue('--panel-h'));
+say2('FIN PERFIL');
+</script>

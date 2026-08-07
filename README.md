@@ -16,6 +16,12 @@ No tiene dependencias ni proceso de build: son ficheros estáticos.
   Vuelve al estado normal al acercarte al 70 % del umbral (histéresis, para que no
   parpadee cuando vas justo en el límite).
 - **Progreso**: porcentaje recorrido y kilómetros que faltan hasta el final.
+- **Perfil de elevación** (botón «Ver perfil»): la altitud de toda la ruta, partida por el
+  punto donde estás — azul lo recorrido, naranja lo que falta, igual que en el mapa — con
+  la altitud actual y el desnivel positivo que queda. Arrastrando el dedo por el perfil se
+  consulta cualquier punto (km y altitud) y se marca a la vez en el mapa. La altitud del
+  GPS es ruidosa, así que se suaviza con una media móvil de ±30 m antes de dibujarla y de
+  contar el desnivel, con un umbral de 3 m para no inflar la subida acumulada.
 - El último track queda guardado: al reabrir la app sigue ahí.
 - Funciona sin cobertura: la app se cachea entera y los tiles del mapa que ya has
   visto se guardan (hasta ~1200 tiles). Conviene abrir la zona con wifi antes de salir.
@@ -72,6 +78,7 @@ css/app.css                estilos
 js/app.js                  mapa, GPS, avisos y UI
 js/geo.js                  haversine, distancia punto-segmento, progreso sobre el track
 js/parse.js                lectura de GPX / KML / TCX / GeoJSON
+js/profile.js              perfil de elevación en canvas, con consulta al arrastrar
 sw.js                      service worker (offline + caché de tiles)
 manifest.webmanifest       instalación como app
 vendor/leaflet/            Leaflet 1.9.4 en local, para que funcione sin red
