@@ -77,7 +77,7 @@ function showTrack(parsed, { save = true, fit = true } = {}) {
   for (const w of parsed.waypoints || []) {
     L.circleMarker([w.lat, w.lon], {
       radius: 4, color: '#fbbf24', weight: 2, fillOpacity: 0.9,
-    }).bindTooltip(w.name || 'Waypoint').addTo(markers);
+    }).bindTooltip(textNode(w.name || 'Waypoint')).addTo(markers);
   }
 
   $('trackName').textContent = track.name;
@@ -427,6 +427,14 @@ window.addEventListener('drop', (e) => {
 });
 
 /* --- Helpers ------------------------------------------------------------- */
+
+// Leaflet inserta el contenido de los tooltips con innerHTML, así que cualquier
+// texto que venga del fichero del usuario se pasa dentro de un nodo ya escapado.
+function textNode(str) {
+  const el = document.createElement('span');
+  el.textContent = str;
+  return el;
+}
 
 function fmtKm(m) {
   if (!Number.isFinite(m)) return '—';
