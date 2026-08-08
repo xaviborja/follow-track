@@ -1,5 +1,12 @@
 // Service worker: la app funciona sin conexión y guarda los tiles ya vistos.
-const VERSION = 'v2';
+//
+// Los ficheros de la app van por red primero y la caché es solo la red de
+// seguridad para cuando no hay cobertura. Servirlos desde caché primero fue un
+// error: cada fichero se refrescaba por su cuenta y la app acababa mezclando
+// versiones (un HTML nuevo con un JavaScript viejo, con botones que no hacían
+// nada). Pesan unos 35 KB entre todos, así que pedirlos a la red no se nota, y
+// a cambio nunca hay dos versiones conviviendo.
+const VERSION = 'v3';
 const SHELL = `ft-shell-${VERSION}`;
 const TILES = `ft-tiles-${VERSION}`;
 const TILE_LIMIT = 1200; // ~30-60 MB según zona
@@ -27,7 +34,10 @@ const SHELL_FILES = [
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(SHELL)
-      .then((c) => c.addAll(SHELL_FILES))
+      // cache: 'reload' evita que la precarga se sirva de la caché HTTP del
+      // navegador: GitHub Pages manda max-age=600 y, sin esto, una instalación
+      // nueva puede guardar ficheros de hasta diez minutos antes.
+      .then((c) => c.addAll(SHELL_FILES.map((u) => new Request(u, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });
@@ -74,13 +84,29 @@ self.addEventListener('fetch', (e) => {
 
   if (url.origin !== location.origin) return;
 
-  // App shell: caché primero, revalidando en segundo plano.
+  // Ficheros de la app: red primero, caché como respaldo sin cobertura.
   e.respondWith((async () => {
     const cache = await caches.open(SHELL);
-    const hit = await cache.match(request, { ignoreSearch: true });
-    const network = fetch(request)
-      .then((res) => { if (res.ok) cache.put(request, res.clone()); return res; })
-      .catch(() => null);
-    return hit || (await network) || cache.match('index.html');
+    try {
+      // cache: 'no-cache' obliga a revalidar contra el servidor. Sin esto la
+      // caché HTTP del navegador sigue devolviendo la versión anterior hasta
+      // que expira el max-age (600 s en GitHub Pages) y la actualización
+      // aparece cuando le apetece. Con ETag, revalidar cuesta un 304.
+      const res = await fetch(new Request(request.url, {
+        cache: 'no-cache',
+        credentials: 'same-origin',
+      }));
+      if (res.ok) cache.put(request, res.clone());
+      return res;
+    } catch {
+      const hit = await cache.match(request, { ignoreSearch: true });
+      if (hit) return hit;
+      // Sin red y sin copia: si es una navegación, servimos la app entera.
+      if (request.mode === 'navigate') {
+        const shell = await cache.match('index.html');
+        if (shell) return shell;
+      }
+      return new Response('', { status: 504, statusText: 'Sin conexión' });
+    }
   })());
 });

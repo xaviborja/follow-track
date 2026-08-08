@@ -564,6 +564,17 @@ if (trackParam) {
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
+
+  // Al entrar una versión nueva recargamos una vez, para no quedarnos con el
+  // HTML nuevo y el JavaScript viejo ya evaluado. En la primera visita no hay
+  // controlador previo y ahí la recarga sobra.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
 }
 
 // Exponemos utilidades mínimas para depurar desde la consola.

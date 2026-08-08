@@ -86,5 +86,17 @@ samples/                   track de ejemplo
 selftest.html              comprobación manual
 ```
 
-Al tocar `sw.js` o los ficheros de la app, sube `VERSION` en `sw.js` para que los
-móviles ya instalados se actualicen.
+## Cómo se actualiza la app instalada
+
+Los ficheros de la app (HTML, CSS, JS) se piden **a la red primero**, revalidando
+contra el servidor, y la caché queda solo como respaldo para cuando no hay cobertura.
+Los tiles del mapa y Leaflet, que no cambian, sí van de caché primero.
+
+Esto es deliberado. La primera versión servía todo de caché primero: cada fichero se
+refrescaba por su cuenta y la app llegó a mezclar un HTML nuevo con un JavaScript
+viejo, con un botón visible que no hacía nada. Con red primero no pueden convivir dos
+versiones, y las 35 KB de la app no se notan al abrirla.
+
+Al publicar cambios, sube `VERSION` en `sw.js`: sirve para descartar la caché anterior
+y volver a precargar la lista de ficheros. Los móviles ya instalados cogen el service
+worker nuevo al abrir la app y se recargan una vez, solos.
