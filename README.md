@@ -16,6 +16,15 @@ No tiene dependencias ni proceso de build: son ficheros estáticos.
   Vuelve al estado normal al acercarte al 70 % del umbral (histéresis, para que no
   parpadee cuando vas justo en el límite).
 - **Progreso**: porcentaje recorrido y kilómetros que faltan hasta el final.
+- **Subidas principales**: bajo el perfil aparece la lista de subidas de la ruta, con
+  desnivel, distancia, pendiente media, rampa máxima y altitud de coronación. Tocando una
+  se enmarca en el mapa y se resalta en el perfil. Se detectan buscando cimas y valles con
+  prominencia (una cima cuenta si después se baja al menos 12 m de ella, para que el ruido
+  del GPS no genere cien repechos), fusionando las separadas por un bajón pequeño —un
+  puerto con un falso llano en medio es un puerto, no dos— y descartando lo que no llega a
+  50 m de desnivel, 200 m de largo o un 3 % de media. Los extremos llanos se recortan, que
+  si no un kilómetro de aproximación hunde la pendiente media. Los umbrales están en
+  `DEFAULTS`, al principio de `js/climbs.js`.
 - **Perfil de elevación** (botón «Ver perfil»): la altitud de toda la ruta, partida por el
   punto donde estás — azul lo recorrido, naranja lo que falta, igual que en el mapa — con
   la altitud actual y el desnivel positivo que queda. Arrastrando el dedo por el perfil se
@@ -78,6 +87,7 @@ css/app.css                estilos
 js/app.js                  mapa, GPS, avisos y UI
 js/geo.js                  haversine, distancia punto-segmento, progreso sobre el track
 js/parse.js                lectura de GPX / KML / TCX / GeoJSON
+js/climbs.js               detección de las subidas principales
 js/profile.js              perfil de elevación en canvas, con consulta al arrastrar
 sw.js                      service worker (offline + caché de tiles)
 manifest.webmanifest       instalación como app

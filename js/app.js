@@ -1,6 +1,7 @@
 import { buildTrack, nearestOnTrack, valueAtDistance, positionAtDistance } from './geo.js';
 import { parseTrackFile } from './parse.js';
 import { createProfile } from './profile.js';
+import { detectClimbs } from './climbs.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE_TRACK = 'ft.track.v1';
@@ -32,6 +33,13 @@ const map = L.map('map', { zoomControl: true, tap: true }).setView([40.4, -3.7],
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '© OpenStreetMap',
+}).addTo(map);
+
+// Se añade antes que el track para que quede por debajo: en Leaflet estas capas
+// se dibujan en el orden en que se añaden. Señala la subida seleccionada, y va
+// en blanco en vez de un color nuevo porque es un estado, no otro dato.
+const climbHalo = L.polyline([], {
+  color: '#ffffff', weight: 11, opacity: 0.85, lineCap: 'round', interactive: false,
 }).addTo(map);
 
 // Sobre los tiles (fondo claro) van los pasos claros del par azul/naranja; el
@@ -79,9 +87,86 @@ const profile = createProfile($('profileCanvas'), {
     if (!map.hasLayer(scrubMarker)) scrubMarker.addTo(map);
     const ele = valueAtDistance(state.track, state.track.ele, meters);
     $('profileNow').textContent =
-      `km ${(meters / 1000).toFixed(2)} · ${Math.round(ele).toLocaleString('es-ES')} m`;
+      `km ${fmtNum(meters / 1000, 2)} · ${Math.round(ele).toLocaleString('es-ES')} m`;
   },
 });
+
+/* --- Subidas principales -------------------------------------------------- */
+
+function renderClimbs() {
+  const list = $('climbList');
+  list.textContent = '';
+  state.selectedClimb = -1;
+  climbHalo.setLatLngs([]);
+
+  const track = state.track;
+  if (!track?.hasEle) { profile.setClimbs([]); return; }
+
+  const climbs = detectClimbs(track);
+  state.climbs = climbs;
+  profile.setClimbs(climbs);
+
+  if (!climbs.length) {
+    const p = document.createElement('li');
+    p.className = 'climbs-none';
+    p.textContent = 'Sin subidas destacadas (mínimo 50 m de desnivel al 3 %).';
+    list.append(p);
+    return;
+  }
+
+  climbs.forEach((c, i) => {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.className = 'climb-row';
+    btn.type = 'button';
+
+    const num = document.createElement('span');
+    num.className = 'climb-num';
+    num.textContent = String(i + 1);
+
+    const main = document.createElement('span');
+    main.className = 'climb-main';
+    const figures = document.createElement('span');
+    figures.className = 'climb-figures';
+    figures.textContent =
+      `↑ ${Math.round(c.gain)} m · ${fmtKm(c.length)} · ${fmtNum(c.avgGrade * 100)} %`;
+    const where = document.createElement('span');
+    where.className = 'climb-where';
+    where.textContent =
+      `km ${fmtNum(c.startDist / 1000)} → ${fmtNum(c.endDist / 1000)}` +
+      ` · máx ${Math.round(c.maxGrade * 100)} % · corona a ${Math.round(c.topEle).toLocaleString('es-ES')} m`;
+    main.append(figures, document.createElement('br'), where);
+
+    btn.append(num, main);
+    btn.onclick = () => selectClimb(i);
+    li.append(btn);
+    list.append(li);
+  });
+}
+
+// Al tocar una subida se enmarca en el mapa y se resalta en el perfil. Tocarla
+// de nuevo deshace la selección.
+function selectClimb(i) {
+  const climbs = state.climbs || [];
+  const same = state.selectedClimb === i;
+  state.selectedClimb = same ? -1 : i;
+  profile.setSelected(state.selectedClimb);
+
+  for (const row of $('climbList').querySelectorAll('.climb-row'))
+    row.removeAttribute('aria-current');
+
+  if (same) {
+    climbHalo.setLatLngs([]);
+    return;
+  }
+
+  const c = climbs[i];
+  const pts = state.track.points.slice(c.fromIdx, c.toIdx + 1).map((p) => [p.lat, p.lon]);
+  climbHalo.setLatLngs(pts);
+  $('climbList').querySelectorAll('.climb-row')[i]?.setAttribute('aria-current', 'true');
+  setFollow(false);
+  map.fitBounds(climbHalo.getBounds(), { padding: [50, 50] });
+}
 
 function showProfile(on) {
   opts.profile = on;
@@ -154,6 +239,7 @@ function showTrack(parsed, { save = true, fit = true } = {}) {
     `${Math.round(track.maxEle)} metros de altitud, con ${track.ascent} metros de subida acumulada.`
   );
   updateProfileNow();
+  renderClimbs();
 
   if (fit && track.bounds) map.fitBounds(track.bounds, { padding: [40, 40] });
   if (save) saveTrack(parsed);
@@ -462,6 +548,7 @@ $('btnClear').onclick = () => {
   state.along = null;
   profile.setTrack(null);
   updateProfileNow();
+  renderClimbs();
   trackLayer.setLatLngs([]);
   doneLayer.setLatLngs([]);
   linkLayer.setLatLngs([]);
@@ -518,7 +605,16 @@ function textNode(str) {
 
 function fmtKm(m) {
   if (!Number.isFinite(m)) return '—';
-  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10000 ? 2 : 1)} km`;
+  if (m < 1000) return `${Math.round(m)} m`;
+  return `${fmtNum(m / 1000, m < 10000 ? 2 : 1)} km`;
+}
+
+// En español la coma es el separador decimal.
+function fmtNum(v, decimals = 1) {
+  return v.toLocaleString('es-ES', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 }
 function readJSON(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }

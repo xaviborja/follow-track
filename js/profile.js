@@ -15,13 +15,17 @@ const INK = '#93a4b8';
 const PAD = { top: 12, right: 10, bottom: 16, left: 38 };
 
 const fmtM = (v) => `${Math.round(v).toLocaleString('es-ES')} m`;
-const fmtKm = (m) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
+const fmtKm = (m) => (m < 1000
+  ? `${Math.round(m)} m`
+  : `${(m / 1000).toLocaleString('es-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`);
 
 export function createProfile(canvas, { onScrub } = {}) {
   const ctx = canvas.getContext('2d');
   let track = null;
   let along = null;   // metros recorridos según el GPS
   let scrub = null;   // metros bajo el dedo, al consultar el perfil
+  let climbs = [];
+  let selected = -1;
   let w = 0, h = 0;
 
   function resize() {
@@ -88,6 +92,28 @@ export function createProfile(canvas, { onScrub } = {}) {
       ctx.stroke();
       ctx.fillText(String(e), p.x - 6, y);
     }
+
+    // Bandas de las subidas: son una anotación sobre la serie, no otra serie,
+    // así que van en tinta neutra y por debajo de la línea.
+    climbs.forEach((c, i) => {
+      const x0 = xOf(c.startDist);
+      const x1 = xOf(c.endDist);
+      ctx.fillStyle = i === selected ? 'rgba(232, 238, 245, 0.16)' : 'rgba(232, 238, 245, 0.07)';
+      ctx.fillRect(x0, p.y, Math.max(1, x1 - x0), p.h);
+      if (i === selected) {
+        ctx.strokeStyle = 'rgba(232, 238, 245, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(Math.round(x0) + 0.5, p.y + 0.5, Math.max(1, x1 - x0), p.h - 1);
+      }
+      // Número de la subida, solo si la banda tiene sitio para él.
+      if (x1 - x0 >= 16) {
+        ctx.fillStyle = INK;
+        ctx.font = '9px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(String(i + 1), (x0 + x1) / 2, p.y + 2);
+      }
+    });
 
     // Muestreamos una altitud por columna de píxel.
     const cols = Math.round(p.w);
@@ -226,8 +252,10 @@ export function createProfile(canvas, { onScrub } = {}) {
   ro.observe(canvas);
 
   return {
-    setTrack(t) { track = t; along = null; scrub = null; resize(); draw(); },
+    setTrack(t) { track = t; along = null; scrub = null; climbs = []; selected = -1; resize(); draw(); },
     setPosition(meters) { along = meters; draw(); },
+    setClimbs(list) { climbs = list || []; selected = -1; draw(); },
+    setSelected(i) { selected = i; draw(); },
     redraw() { resize(); draw(); },
   };
 }

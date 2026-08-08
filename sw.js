@@ -6,7 +6,7 @@
 // versiones (un HTML nuevo con un JavaScript viejo, con botones que no hacían
 // nada). Pesan unos 35 KB entre todos, así que pedirlos a la red no se nota, y
 // a cambio nunca hay dos versiones conviviendo.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL = `ft-shell-${VERSION}`;
 const TILES = `ft-tiles-${VERSION}`;
 const TILE_LIMIT = 1200; // ~30-60 MB según zona
@@ -18,6 +18,7 @@ const SHELL_FILES = [
   'js/app.js',
   'js/geo.js',
   'js/parse.js',
+  'js/climbs.js',
   'js/profile.js',
   'manifest.webmanifest',
   'vendor/leaflet/leaflet.js',
