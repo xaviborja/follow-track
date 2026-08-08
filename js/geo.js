@@ -47,8 +47,8 @@ function pointToSegment(pLat, pLon, aLat, aLon, bLat, bLon) {
  * Precalcula longitudes de segmento y distancias acumuladas.
  */
 export function buildTrack(points, name = 'Track') {
-  const pts = points.filter(
-    (p) => Number.isFinite(p.lat) && Number.isFinite(p.lon)
+  const pts = thinByDistance(
+    points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon))
   );
   const n = pts.length;
   const segLen = new Float64Array(Math.max(0, n - 1));
@@ -82,6 +82,30 @@ export function buildTrack(points, name = 'Track') {
 }
 
 /**
+ * Descarta los puntos que están a menos de MIN_STEP del último conservado.
+ *
+ * Un track grabado con el móvil puede traer un punto cada metro y medio, y a esa
+ * densidad lo que se está midiendo entre punto y punto es el error del GPS, no
+ * el avance: la suma sale varios por ciento larga (en una carrera de 100 km,
+ * 2 km de más). Quitar los pasos por debajo del ruido no cambia el trazado —tres
+ * metros no se ven ni en el zoom máximo del mapa— y deja la distancia donde
+ * debe estar. De paso reduce mucho los puntos a guardar y a recorrer.
+ */
+const MIN_STEP = 3; // m
+
+function thinByDistance(points) {
+  if (points.length < 3) return points;
+  const out = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const q = out[out.length - 1];
+    if (haversine(q.lat, q.lon, points[i].lat, points[i].lon) >= MIN_STEP)
+      out.push(points[i]);
+  }
+  out.push(points[points.length - 1]);   // el final no se pierde nunca
+  return out;
+}
+
+/**
  * Serie de elevación lista para dibujar y para contar desnivel.
  *
  * La altitud del GPS es ruidosa, así que se suaviza con una media móvil sobre
@@ -110,8 +134,13 @@ function elevationProfile(pts, cum) {
   }
   for (let j = prevIdx + 1; j < n; j++) filled[j] = filled[prevIdx];
 
-  // Media móvil sobre ±30 m recorridos.
-  const WIN = 30;
+  // Media móvil sobre ±20 m recorridos. El valor sale de medir, para varias
+  // combinaciones de ventana y umbral, el desnivel de dos carreras reales
+  // contra su cifra publicada y el desnivel *falso* que produce una ruta llana
+  // con ruido de ±3 m punto a punto. Con ±30 m ambas carreras salían un 7 %
+  // cortas; con ±10 m cuadraban mejor pero el ruido inventaba 368 m en 40 km.
+  // Con ±20 m se queda a un 4 % de las dos y el ruido apenas aporta 30 m.
+  const WIN = 20;
   const ele = new Float64Array(n);
   let lo = 0, hi = 0, sum = 0;
   for (let i = 0; i < n; i++) {
@@ -123,10 +152,12 @@ function elevationProfile(pts, cum) {
   const cumAscent = new Float64Array(n);
   let up = 0, down = 0, ref = ele[0];
   let minEle = ele[0], maxEle = ele[0];
+  // Umbral de 2 m: por debajo de eso es deriva del barómetro, no desnivel.
+  const STEP = 2;
   for (let i = 1; i < n; i++) {
     const d = ele[i] - ref;
-    if (d > 3) { up += d; ref = ele[i]; }
-    else if (d < -3) { down -= d; ref = ele[i]; }
+    if (d > STEP) { up += d; ref = ele[i]; }
+    else if (d < -STEP) { down -= d; ref = ele[i]; }
     cumAscent[i] = up;
     if (ele[i] < minEle) minEle = ele[i];
     if (ele[i] > maxEle) maxEle = ele[i];

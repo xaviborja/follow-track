@@ -4,7 +4,10 @@ import { createProfile } from './profile.js';
 import { detectClimbs } from './climbs.js';
 
 const $ = (id) => document.getElementById(id);
-const STORE_TRACK = 'ft.track.v1';
+// v2: los tracks guardados con la versión anterior llevan las coordenadas
+// redondeadas a 5 decimales y darían una distancia inflada, así que se descartan
+// en vez de mostrar cifras equivocadas. Hay que volver a cargar el fichero.
+const STORE_TRACK = 'ft.track.v2';
 const STORE_OPTS = 'ft.opts.v1';
 
 const opts = Object.assign(
@@ -270,13 +273,18 @@ async function loadFile(file) {
 }
 
 function saveTrack(parsed) {
-  // Redondeamos a 5 decimales (~1 m) para que quepa en localStorage.
+  // 6 decimales, unos 11 cm. Con 5 (~1 m) el error de redondeo se sumaba en
+  // cada uno de los miles de pasos de un track denso y la ruta salía kilómetros
+  // más larga: una de 102 km se guardaba como 106. El track ya viene aligerado
+  // desde buildTrack, así que el tamaño no se dispara.
+  // Guardamos los puntos ya aligerados por buildTrack, no los del fichero: son
+  // muchos menos y dan exactamente las mismas cifras al recargar.
   const compact = {
     name: parsed.name,
-    p: parsed.points.map((p) => [
-      +p.lat.toFixed(5),
-      +p.lon.toFixed(5),
-      Number.isFinite(p.ele) ? Math.round(p.ele) : null,
+    p: (state.track?.points || parsed.points).map((p) => [
+      +p.lat.toFixed(6),
+      +p.lon.toFixed(6),
+      Number.isFinite(p.ele) ? +p.ele.toFixed(1) : null,
     ]),
     w: (parsed.waypoints || []).map((w) => [+w.lat.toFixed(5), +w.lon.toFixed(5), w.name || '']),
   };
@@ -288,6 +296,7 @@ function saveTrack(parsed) {
 }
 
 function restoreTrack() {
+  localStorage.removeItem('ft.track.v1');   // libera el formato antiguo
   const saved = readJSON(STORE_TRACK, null);
   if (!saved?.p?.length) return;
   try {

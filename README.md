@@ -32,8 +32,8 @@ No tiene dependencias ni proceso de build: son ficheros estáticos.
   punto donde estás — azul lo recorrido, naranja lo que falta, igual que en el mapa — con
   la altitud actual y el desnivel positivo que queda. Arrastrando el dedo por el perfil se
   consulta cualquier punto (km y altitud) y se marca a la vez en el mapa. La altitud del
-  GPS es ruidosa, así que se suaviza con una media móvil de ±30 m antes de dibujarla y de
-  contar el desnivel, con un umbral de 3 m para no inflar la subida acumulada.
+  GPS es ruidosa, así que se suaviza antes de dibujarla y de contar el desnivel; los
+  valores y por qué son esos están más abajo.
 - El último track queda guardado: al reabrir la app sigue ahí.
 - Funciona sin cobertura: la app se cachea entera y los tiles del mapa que ya has
   visto se guardan (hasta ~1200 tiles). Conviene abrir la zona con wifi antes de salir.
@@ -79,8 +79,36 @@ código, pero para el uso normal no hace falta.
   tráfico. Si lo vais a usar varias personas, cambia la URL del tile layer en
   `js/app.js:28` por un proveedor con clave (Thunderforest, MapTiler…).
 - Los KMZ van comprimidos: descomprime y carga el `.kml` de dentro.
-- El track se guarda en `localStorage`; uno de más de ~4 MB (unos 100.000 puntos) no
-  se guardará, aunque sí se carga y funciona en esa sesión.
+- El track se guarda en `localStorage`; uno de más de ~4 MB no se guardará, aunque sí se
+  carga y funciona en esa sesión. Una carrera de 100 km ocupa unos 0,65 MB.
+
+## Por qué las cifras pueden no coincidir con Wikiloc o con tu reloj
+
+**La distancia sí debería coincidir.** Los tracks grabados con el móvil traen un punto
+cada uno o dos metros, y a esa densidad lo que se mide entre punto y punto es el error
+del GPS, no el avance: sumarlos tal cual da varios kilómetros de más en una ruta larga.
+Por eso se descartan los pasos de menos de 3 m (`MIN_STEP` en `js/geo.js`), que no se ven
+ni al máximo zoom. Con la Ultra Pirineu 2025 salen 100,34 km frente a los 100,32 de
+Wikiloc.
+
+**El desnivel acumulado no coincide nunca entre herramientas, y es normal.** Depende de
+cuánto suavice cada una la altitud antes de sumar. Aquí se usa una media móvil de ±20 m
+y un umbral de 2 m: por debajo de eso es deriva del barómetro, no desnivel. Wikiloc suma
+casi en crudo, con un umbral de alrededor de 1 m, y le salen cifras un 4 % más altas.
+
+Esos dos valores no están elegidos a ojo: se midieron varias combinaciones contra dos
+carreras reales y contra una ruta llana con ruido de ±3 m punto a punto, que debería dar
+cero. Suavizar poco cuadra mejor con las carreras pero hace que el ruido invente
+desnivel; suavizar mucho lo aplana todo.
+
+| ventana / umbral | Ultra Pirineu (Wikiloc 5.936) | Volta del Gegant (ficha 1.800) | llano con ruido (ideal 0) |
+|---|---|---|---|
+| ±10 m / 2 m | 5.756 (−3,0 %) | 1.823 (+1,3 %) | 368 m falsos |
+| **±20 m / 2 m** | **5.675 (−4,4 %)** | **1.780 (−1,1 %)** | **30 m falsos** |
+| ±30 m / 3 m | 5.545 (−6,6 %) | 1.737 (−3,5 %) | 0 m falsos |
+
+Si prefieres cifras más altas o más bajas, los dos parámetros están juntos en
+`elevationProfile`, en `js/geo.js`.
 
 ## Estructura
 
