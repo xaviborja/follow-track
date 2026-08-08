@@ -179,7 +179,16 @@ function showProfile(on) {
   if (on) profile.redraw();
 }
 
-// Altitud y desnivel que queda, o el resumen del track si aún no hay posición.
+// Desnivel positivo que queda hasta el final. Sin posición todavía, queda
+// entero, igual que los kilómetros.
+function remainingAscent(track, along) {
+  if (!track?.hasEle) return null;
+  if (along === null || along === undefined) return track.ascent;
+  return Math.max(0, track.ascent - valueAtDistance(track, track.cumAscent, along));
+}
+
+// Cabecera del perfil: la altitud a la que estás, o el resumen del track si aún
+// no hay posición.
 function updateProfileNow() {
   const track = state.track;
   const el = $('profileNow');
@@ -190,9 +199,7 @@ function updateProfileNow() {
     return;
   }
   const ele = valueAtDistance(track, track.ele, along);
-  const upLeft = Math.max(0, track.ascent - valueAtDistance(track, track.cumAscent, along));
-  el.textContent =
-    `${Math.round(ele).toLocaleString('es-ES')} m · quedan ↑ ${Math.round(upLeft).toLocaleString('es-ES')} m`;
+  el.textContent = `${Math.round(ele).toLocaleString('es-ES')} m de altitud`;
 }
 
 /* --- Carga de track ------------------------------------------------------ */
@@ -369,6 +376,7 @@ function updateReadout(fix) {
     $('devValue').textContent = '—';
     $('progValue').textContent = '—';
     $('remValue').textContent = track ? fmtKm(track.total) : '—';
+    $('ascValue').textContent = fmtAscent(remainingAscent(track, null));
     linkLayer.setLatLngs([]);
     state.along = null;
     updateProfileNow();
@@ -386,6 +394,7 @@ function updateReadout(fix) {
   $('devValue').textContent = dist < 1000 ? `${Math.round(dist)} m` : fmtKm(dist);
   $('progValue').textContent = `${pct.toFixed(0)} %`;
   $('remValue').textContent = fmtKm(remaining);
+  $('ascValue').textContent = fmtAscent(remainingAscent(track, near.along));
   $('progFill').style.width = `${pct}%`;
 
   // Coloreamos la parte ya recorrida y dibujamos la línea al punto más cercano.
@@ -607,6 +616,12 @@ function fmtKm(m) {
   if (!Number.isFinite(m)) return '—';
   if (m < 1000) return `${Math.round(m)} m`;
   return `${fmtNum(m / 1000, m < 10000 ? 2 : 1)} km`;
+}
+
+// Un track sin altitudes no puede decir cuánto queda por subir.
+function fmtAscent(m) {
+  // Sin flecha y con unidad, como el resto de cifras: la etiqueta ya dice qué es.
+  return m === null || m === undefined ? '—' : `${Math.round(m).toLocaleString('es-ES')} m`;
 }
 
 // En español la coma es el separador decimal.

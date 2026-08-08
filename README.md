@@ -15,7 +15,10 @@ No tiene dependencias ni proceso de build: son ficheros estáticos.
   configurado (10–500 m). Se repite cada 25 s mientras sigas fuera y se puede silenciar.
   Vuelve al estado normal al acercarte al 70 % del umbral (histéresis, para que no
   parpadee cuando vas justo en el límite).
-- **Progreso**: porcentaje recorrido y kilómetros que faltan hasta el final.
+- **Progreso**: porcentaje recorrido, kilómetros que faltan y **desnivel positivo que
+  queda** hasta el final. Antes de empezar las dos últimas cifras muestran el total de la
+  ruta, y van bajando conforme avanzas. El desnivel restante se calcula sobre la subida
+  acumulada del track, no como diferencia de altitud, así que cuenta los repechos.
 - **Subidas principales**: bajo el perfil aparece la lista de subidas de la ruta, con
   desnivel, distancia, pendiente media, rampa máxima y altitud de coronación. Tocando una
   se enmarca en el mapa y se resalta en el perfil. Se detectan buscando cimas y valles con

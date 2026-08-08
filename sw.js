@@ -6,7 +6,7 @@
 // versiones (un HTML nuevo con un JavaScript viejo, con botones que no hacían
 // nada). Pesan unos 35 KB entre todos, así que pedirlos a la red no se nota, y
 // a cambio nunca hay dos versiones conviviendo.
-const VERSION = 'v5';
+const VERSION = 'v6';
 const SHELL = `ft-shell-${VERSION}`;
 const TILES = `ft-tiles-${VERSION}`;
 const TILE_LIMIT = 1200; // ~30-60 MB según zona
