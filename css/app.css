@@ -226,7 +226,9 @@ html, body {
   margin: 6px 0 0;
   padding: 0;
   list-style: none;
-  max-height: 132px;
+  /* Sitio para cuatro subidas sin recortar ninguna a media altura; a partir de
+     ahí la lista hace scroll en vez de comerse el mapa. */
+  max-height: 38vh;
   overflow-y: auto;
   overscroll-behavior: contain;
 }

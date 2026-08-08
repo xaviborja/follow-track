@@ -28,53 +28,11 @@ export function detectClimbs(track, options = {}) {
   const n = track.points.length;
   if (n < 3) return [];
 
-  // --- 1. Extremos con prominencia ---
-  const ext = [];
-  let candMin = 0, candMax = 0, dir = 0;
-  for (let i = 1; i < n; i++) {
-    const e = ele[i];
-    if (e > ele[candMax]) candMax = i;
-    if (e < ele[candMin]) candMin = i;
-    if (dir !== -1 && e < ele[candMax] - o.prominence) {
-      ext.push({ idx: candMax, type: 'max' });
-      dir = -1;
-      candMin = i;
-    } else if (dir !== 1 && e > ele[candMin] + o.prominence) {
-      ext.push({ idx: candMin, type: 'min' });
-      dir = 1;
-      candMax = i;
-    }
-  }
-  if (dir === 1) ext.push({ idx: candMax, type: 'max' });
-  else if (dir === -1) ext.push({ idx: candMin, type: 'min' });
+  const ext = findExtrema(track, o.prominence);
+  const found = [];
+  collectRange(track, 0, n - 1, ext, o, found, 0);
 
-  // --- 2. Valle → cima, y fusión de las separadas por un bajón pequeño ---
-  let climbs = [];
-  for (let i = 0; i < ext.length - 1; i++) {
-    if (ext[i].type === 'min' && ext[i + 1].type === 'max')
-      climbs.push({ from: ext[i].idx, to: ext[i + 1].idx });
-  }
-
-  let merged = true;
-  while (merged) {
-    merged = false;
-    for (let i = 0; i < climbs.length - 1; i++) {
-      const a = climbs[i], b = climbs[i + 1];
-      const dip = ele[a.to] - ele[b.from];          // lo que se baja entre las dos
-      const gain = ele[b.to] - ele[a.from];         // desnivel si se fusionan
-      const length = cum[b.to] - cum[a.from];
-      if (gain <= 0 || length <= 0) continue;
-      if (dip <= o.mergeDrop * gain && gain / length >= o.minGrade) {
-        climbs.splice(i, 2, { from: a.from, to: b.to });
-        merged = true;
-        break;
-      }
-    }
-  }
-
-  // --- 3. Recortar extremos, filtrar y medir ---
-  return climbs
-    .map((c) => trimFlatEnds(track, c.from, c.to, o.minGrade))
+  return found
     .map((c) => {
       const gain = ele[c.to] - ele[c.from];
       const length = cum[c.to] - cum[c.from];
@@ -92,6 +50,81 @@ export function detectClimbs(track, options = {}) {
     })
     .filter((c) => c.gain >= o.minGain && c.length >= o.minLength && c.avgGrade >= o.minGrade)
     .sort((a, b) => a.startDist - b.startDist);
+}
+
+// --- 1. Extremos con prominencia ---
+function findExtrema(track, prominence) {
+  const { ele } = track;
+  const n = track.points.length;
+  const ext = [];
+  let candMin = 0, candMax = 0, dir = 0;
+  for (let i = 1; i < n; i++) {
+    const e = ele[i];
+    if (e > ele[candMax]) candMax = i;
+    if (e < ele[candMin]) candMin = i;
+    if (dir !== -1 && e < ele[candMax] - prominence) {
+      ext.push({ idx: candMax, type: 'max' });
+      dir = -1;
+      candMin = i;
+    } else if (dir !== 1 && e > ele[candMin] + prominence) {
+      ext.push({ idx: candMin, type: 'min' });
+      dir = 1;
+      candMax = i;
+    }
+  }
+  if (dir === 1) ext.push({ idx: candMax, type: 'max' });
+  else if (dir === -1) ext.push({ idx: candMin, type: 'min' });
+  return ext;
+}
+
+/**
+ * Busca subidas dentro del rango [lo, hi] y las acumula en `out`.
+ *
+ * Fusiona, recorta y —esto es lo importante— vuelve a buscar dentro de lo que
+ * el recorte ha descartado. Puede pasar que dos subidas se fusionen por tener
+ * un bajón tolerable entre ellas y que después el recorte decida que cruzar ese
+ * bajón no compensaba: sin esta segunda pasada, la subida del final se perdía
+ * en vez de quedarse como una subida aparte. Es lo que ocurría con la tercera
+ * subida de una carrera de montaña, 200 m de desnivel al 23 % que no aparecían.
+ */
+function collectRange(track, lo, hi, ext, o, out, depth) {
+  if (depth > 5 || hi - lo < 2) return;
+
+  // --- 2. Valle → cima dentro del rango, y fusión de las separadas por un
+  //        bajón pequeño en relación al desnivel total ---
+  let climbs = [];
+  for (let i = 0; i < ext.length - 1; i++) {
+    if (ext[i].type === 'min' && ext[i + 1].type === 'max'
+        && ext[i].idx >= lo && ext[i + 1].idx <= hi)
+      climbs.push({ from: ext[i].idx, to: ext[i + 1].idx });
+  }
+  if (!climbs.length) return;
+
+  const { ele, cum } = track;
+  let merged = true;
+  while (merged) {
+    merged = false;
+    for (let i = 0; i < climbs.length - 1; i++) {
+      const a = climbs[i], b = climbs[i + 1];
+      const dip = ele[a.to] - ele[b.from];    // lo que se baja entre las dos
+      const gain = ele[b.to] - ele[a.from];   // desnivel si se fusionan
+      const length = cum[b.to] - cum[a.from];
+      if (gain <= 0 || length <= 0) continue;
+      if (dip <= o.mergeDrop * gain && gain / length >= o.minGrade) {
+        climbs.splice(i, 2, { from: a.from, to: b.to });
+        merged = true;
+        break;
+      }
+    }
+  }
+
+  // --- 3. Recortar los extremos llanos y rescatar lo descartado ---
+  for (const c of climbs) {
+    const t = trimFlatEnds(track, c.from, c.to, o.minGrade);
+    if (t.to > t.from) out.push(t);
+    if (t.from - c.from > 2) collectRange(track, c.from, t.from, ext, o, out, depth + 1);
+    if (c.to - t.to > 2) collectRange(track, t.to, c.to, ext, o, out, depth + 1);
+  }
 }
 
 /**
